@@ -1,7 +1,6 @@
 s.boot
 s.scope
 
-
 //
 // INITIALIZE GRID
 //
@@ -9,7 +8,12 @@ s.scope
 ~m = MonoM.new("/monome", 0);
 ~m.useDevice(0);
 ~m.darkness;
+
 ~gridPitchValues = [0,0,0,0,0,0,0,0];
+~gridOctaveValues = [0,0,3,0,0,0,0,0];
+~gridRowInEditMode = [0,0,0,0,0,0,0,0]; // TODO: Boolean
+
+~keysHeld = 0;
 
 ~initGrid = {
 	~gridPitchValues.do({ | xpos, row |
@@ -20,26 +24,84 @@ s.scope
 ~initGrid.value;
 
 ~gridSetPitch = { | row, xpos |
+	~gridDisplayRow.value(row);
+	~gridPitchValues[row] = xpos;
+	// set pitch values
+};
+
+~gridSetOctave = { | row, octave |
+	if(~gridRowInEditMode[row] == 1,
+		{
+			if(octave > 5, {
+				octave = 5;
+			});
+			~gridOctaveValues[row] = octave;
+			~gridDisplayEditRow.value(row);
+			// set octave value
+		}
+	)
+};
+
+~gridDisplayRow = { | row |
 	var fillRowBefore;
 	var fillRowAfter;
 	var toFill;
 	var setRow;
-	fillRowBefore = Array.fill(xpos, 2);
+
+	fillRowBefore = Array.fill(~gridPitchValues[row], 2);
 	toFill = 15 - fillRowBefore.size;
 	fillRowAfter = Array.fill(toFill, 0);
 	setRow = fillRowBefore ++ Array.with(8) ++ fillRowAfter;
 	~m.levrow(0,row,setRow);
-	~gridPitchValues[row] = xpos;
 };
+
+~gridDisplayEditRow = { | row |
+	var fillActiveOctave, fillOctaveAfter, setRow;
+
+	fillActiveOctave = Array.fill(~gridOctaveValues[row], 10);
+	fillOctaveAfter = Array.fill(15 - fillActiveOctave.size, 4);
+	setRow = fillActiveOctave ++ fillOctaveAfter ++ Array.with(0);
+	~m.levrow(0,row,setRow);
+};
+
+
+
 
 OSCFunc.newMatching({ | message, time, addr, recvPort |
 	var gridX = message[1];
 	var gridY = message[2];
 	var buttonDown = message[3];
 
-	~gridSetPitch.value(gridY, gridX);
+	if(buttonDown == 1,
+		{ ~keysHeld = ~keysHeld + 1; },
+		{ ~keysHeld = ~keysHeld - 1; });
+
+	if((gridX < 15 && (~keysHeld == 1) && (buttonDown == 1)),
+		{ ~gridSetPitch.value(gridY, gridX); },
+		{
+			// TODO: Check if edit mode active, not if 2 buttons held => Array.collect?
+			if((buttonDown == 1) && (~keysHeld == 1),
+				{
+					~gridRowInEditMode[gridY] = 1;
+					~gridDisplayEditRow.value(gridY);
+				},
+				{
+					if(~keysHeld == 0, {
+						~gridRowInEditMode[gridY] = 0;
+						~gridDisplayRow.value(gridY);
+					});
+
+				}
+			);
+
+			if((~keysHeld == 2) && (~gridRowInEditMode[gridY] == 1),
+				{ ~gridSetOctave.value(gridY, gridX + 1); }
+			);
+		}
+	);
 
 	message.postln;
+	~keysHeld.postln;
 	//~m.ledset(message[1], message[2], message[3]);
 	//~m.levset(message[1] - 1, message[2], 6);
 
@@ -78,9 +140,11 @@ SynthDef.new(\sineosc, { arg freq = 440, out = 0, dust_freq = 1, device = 0;
 OSCFunc.newMatching({ | message, time |
 	var row = message[2];
 	var xpos = ~gridPitchValues[row];
-	~m.levset(xpos,row, 12);
-	SystemClock.sched(0.1, {
-		~m.levset(xpos,row, 8);
+	if(~gridRowInEditMode[row] == 0, {
+		~m.levset(xpos,row, 12);
+		SystemClock.sched(0.1, {
+			~m.levset(xpos,row, 8);
+		});
 	});
 }, "/tr", s.addr);
 )
