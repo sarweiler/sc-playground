@@ -10,8 +10,10 @@ s.scope
 ~m.darkness;
 
 ~gridPitchValues = [0,0,0,0,0,0,0,0];
-~gridOctaveValues = [0,0,3,0,0,0,0,0];
+~gridOctaveValues = [1,1,1,1,1,1,1,1];
 ~gridRowInEditMode = [0,0,0,0,0,0,0,0]; // TODO: Boolean
+
+~octaves = [24,36,48,60,72];
 
 ~keysHeld = 0;
 
@@ -26,7 +28,7 @@ s.scope
 ~gridSetPitch = { | row, xpos |
 	~gridDisplayRow.value(row);
 	~gridPitchValues[row] = xpos;
-	// set pitch values
+	~setPitch.value(row, ~gridOctaveValues[row], ~gridPitchValues[row]);
 };
 
 ~gridSetOctave = { | row, octave |
@@ -37,7 +39,7 @@ s.scope
 			});
 			~gridOctaveValues[row] = octave;
 			~gridDisplayEditRow.value(row);
-			// set octave value
+			~setPitch.value(row, ~gridOctaveValues[row], ~gridPitchValues[row]);
 		}
 	)
 };
@@ -64,8 +66,17 @@ s.scope
 	~m.levrow(0,row,setRow);
 };
 
+~setPitch = { | synthNum, octave, note |
+	var frequency = ~calcPitch.value(octave, note);
+	"oct: " + octave.postln;
+	frequency.postln;
+	~snths[synthNum].set(\freq, frequency);
+};
 
-
+~calcPitch = { | oct, note |
+	var midiNote = ~octaves[oct - 1] + note;
+	midiNote.midicps;
+};
 
 OSCFunc.newMatching({ | message, time, addr, recvPort |
 	var gridX = message[1];
@@ -108,15 +119,14 @@ OSCFunc.newMatching({ | message, time, addr, recvPort |
 }, "/monome/grid/key");
 )
 
-
 //
 // INITIALIZE SYNTHDEF
 //
 (
-SynthDef.new(\sineosc, { arg freq = 440, out = 0, dust_freq = 1, device = 0;
+SynthDef.new(\sineosc, { arg freq = 24.midicps, out = 0, dust_freq = 0.5, device = 0;
 	var dust = Dust.kr(dust_freq);
-	var env = Env([0.000001, 1, 0.000001], [0.01, 0.09], \exp).kr(0, dust);
-	Out.ar(out, FreeVerb2.ar(SinOsc.ar(freq, 0, 0.2) * env, SinOsc.ar(freq, 0, 0.2) * env), \mix, 0.7);
+	var env = Env([0.000001, 1, 0.000001], [0.1, 1], \exp).kr(0, dust);
+	Out.ar(out, FreeVerb2.ar(LFTri.ar(freq, 0, 0.2) * env, SinOsc.ar(freq, 0, 0.2) * env, 0.8, 0.8, 0.1));
 	SendTrig.kr(dust, device);
 }).add;
 )
