@@ -192,7 +192,7 @@ OSCFunc.newMatching({ | message |
 
 	~arcSetFancyVal.value(enc, encVisualVal.floor);
 }, "/monome/enc/delta");
-
+)
 //
 // INITIALIZE SYNTHDEF
 //
