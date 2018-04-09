@@ -9,6 +9,9 @@ s.scope
 ~m.useDevice(0);
 ~m.darkness;
 
+
+// GRID
+
 ~gridPitchValues = [0,0,0,0,0,0,0,0];
 ~gridOctaveValues = [1,1,1,1,1,1,1,1];
 ~gridRowInEditMode = [0,0,0,0,0,0,0,0]; // TODO: Boolean
@@ -117,7 +120,78 @@ OSCFunc.newMatching({ | message, time, addr, recvPort |
 	//~m.levset(message[1] - 1, message[2], 6);
 
 }, "/monome/grid/key");
-)
+
+
+// ARC
+~a = Arc.new("/monome", 0);
+~a.useDevice(1);
+~a.darkness;
+
+~arcResolution = 1024;
+~arcBrightness = 8;
+~arcEncoderValues = [0,0,0,0];
+
+~arcSetSimpleVal = { | enc, val |
+	if(val <= 0, {
+		~a.darkness;
+	}, {
+		~a.ringrange(enc, 0, val, ~arcBrightness);
+		if(val < 63, {
+			~a.ringrange(enc, val + 1, 63, 0);
+		});
+	});
+};
+
+~arcSetFancyVal = { | enc, val |
+	var arrayPart1, arrayPart2, arrayFill, setArc;
+	var arrayHalfSize = (val / 2).ceil;
+	var arrayFall = [~arcBrightness - 2, ~arcBrightness - 4, ~arcBrightness - 6];
+	var arrayRise = [~arcBrightness - 6, ~arcBrightness - 4, ~arcBrightness - 2];
+
+	("enc val: " + val).postln;
+
+	if((val > 2) && (val <= 4), {
+		arrayFall = arrayFall[1..2];
+		arrayRise = arrayRise[0..1];
+	});
+
+	if((val <= 2), {
+		arrayFall = arrayFall[2..2];
+		arrayRise = arrayRise[0..0];
+	});
+
+	if(val <= 0, {
+		~a.ringmap(enc, Array.fill(64, 0));
+	}, {
+		arrayPart1 = Array.fill((arrayHalfSize - arrayFall.size.min(3)).max(0), ~arcBrightness);
+		arrayPart2 = Array.fill((arrayHalfSize - arrayRise.size.min(3)).max(0), ~arcBrightness);
+		arrayFill = Array.fill(64 - (arrayHalfSize * 2), 0);
+
+		("arr1 size: " + arrayPart1.size).postln;
+		("arr2 size: " + arrayPart2.size).postln;
+
+		setArc = arrayPart1 ++ arrayFall ++ arrayFill ++ arrayRise ++ arrayPart2;
+
+		("setArc size: " + setArc.size).postln;
+		arrayFall.postln;
+		arrayRise.postln;
+		setArc.postln;
+
+		~a.ringmap(enc, setArc);
+	});
+};
+
+
+OSCFunc.newMatching({ | message |
+	var enc = message[1];
+	var encDelta = message[2];
+	var encVal = (encDelta + ~arcEncoderValues[enc]).min(~arcResolution - 1).max(0);
+	var encVisualVal = (encVal / (~arcResolution / 64)).max(0);
+	~arcEncoderValues[enc] = encVal;
+	encVisualVal.floor.postln;
+
+	~arcSetFancyVal.value(enc, encVisualVal.floor);
+}, "/monome/enc/delta");
 
 //
 // INITIALIZE SYNTHDEF
